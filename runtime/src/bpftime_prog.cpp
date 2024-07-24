@@ -64,7 +64,11 @@ int bpftime_prog::bpftime_prog_load(bool jit)
 	}
 	return 0;
 }
-
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
 int bpftime_prog::bpftime_prog_unload()
 {
 	if (jitted) {
@@ -74,7 +78,14 @@ int bpftime_prog::bpftime_prog_unload()
 	ebpf_unload_code(vm);
 	return 0;
 }
-
+/**
+ * @brief 
+ * 这个函数就是虚拟化执行的函数
+ * @param memory 
+ * @param memory_size 
+ * @param return_val 
+ * @return int 
+ */
 int bpftime_prog::bpftime_prog_exec(void *memory, size_t memory_size,
 				    uint64_t *return_val) const
 {

@@ -145,6 +145,15 @@ int frida_attach_impl::detach_by_func_addr(const void *func)
 }
 
 extern "C" uint64_t bpftime_set_retval(uint64_t value);
+/**
+ * @brief 
+ * 	这个函数就是创建
+ * 
+ * @param cb 
+ * @param private_data 
+ * @param attach_type 
+ * @return int 
+ */
 int frida_attach_impl::create_attach_with_ebpf_callback(
 	ebpf_run_callback &&cb, const attach_private_data &private_data,
 	int attach_type)

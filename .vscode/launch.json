@@ -1,9 +1,102 @@
 {
-    // 使用 IntelliSense 了解相关属性。 
+    // 使用 IntelliSense 了解相关属性。
     // 悬停以查看现有属性的描述。
     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        {
+            "name": "检测程序",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tools/cli-cpp/bpftime",
+            "args": [
+                "load",
+                "${workspaceFolder}/example/malloc/malloc"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [
+                {
+                    "name": "LD_PRELOAD",
+                    "value": "${workspaceFolder}/build/runtime/syscall-server/libbpftime-syscall-server.so"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "将反汇编风格设置为 Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                },
+                {
+                    // 添加该选项设置 gdb 在新的 fork 进程或子线程上暂停
+                    "description": "set follow-fork-mode",
+                    "text": "set follow-fork-mode child",
+                    "ignoreFailures": false
+                },
+                // 加载你的库的符号。必须在程序开始执行前加载
+                {
+                    "description": "Loading symbols for your library",
+                    "text": "add-symbol-file ${workspaceFolder}/build/runtime/syscall-server/libbpftime-syscall-server.so", // 需要更改到你的库文件的实际路径
+                    "ignoreFailures": false
+                }
+                // {
+                //   // 添加该选项设置 gdb 在新的线程开始时暂停
+                //   "description": "set scheduler-locking",
+                //   "text": "set scheduler-locking on",
+                //   "ignoreFailures": false
+                // }
+            ]
+        },
+        {
+            "name": "被检测程序",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tools/cli-cpp/bpftime",
+            "args": [
+                "start",
+                "${workspaceFolder}/example/malloc/victim"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [
+                {
+                    "name": "LD_PRELOAD",
+                    "value": "${workspaceFolder}/build/runtime/agent/libbpftime-agent.so"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "将反汇编风格设置为 Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                },
+                {
+                    // 添加该选项设置 gdb 在新的 fork 进程或子线程上暂停
+                    "description": "set follow-fork-mode",
+                    "text": "set follow-fork-mode child",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "Loading symbols for your library",
+                    "text": "add-symbol-file ${workspaceFolder}/build/runtime/agent/libbpftime-agent.so", // 需要更改到你的库文件的实际路径
+                    "ignoreFailures": false
+                }
+            ]
+        },
         {
             "name": "(gdb) runtime",
             "type": "cppdbg",
@@ -16,7 +109,7 @@
                 {
                     "name": "LD_PRELOAD",
                     "value": "${workspaceFolder}/build/runtime/agent/libbpftime-agent.so"
-                },
+                }
                 // {
                 //     "name": "LD_PRELOAD",
                 //     "value": "/home/yunwei/bpftime/build/runtime/syscall-server/libbpftime-syscall-server.so"

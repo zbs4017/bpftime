@@ -240,7 +240,7 @@ inline static void ebpf_mem_store(uint64_t address, uint64_t value, size_t size)
 		abort();
 	}
 }
-
+// 进行真正的执行
 int ebpf_exec(const struct ebpf_vm *vm, void *mem, size_t mem_len,
 	      uint64_t *bpf_return_value)
 {
@@ -249,7 +249,10 @@ int ebpf_exec(const struct ebpf_vm *vm, void *mem, size_t mem_len,
 	uint64_t *reg;
 	uint64_t _reg[16];
 	uint64_t stack[(EBPF_STACK_SIZE + 7) / 8];
-
+	int *tmp_tmp = (int *)malloc(sizeof(int));
+	*tmp_tmp = 1;
+	// std::cout<<*tmp<<std::endl;
+	free(tmp_tmp);
 	if (!insts) {
 		/* Code must be loaded before we can execute */
 		return -1;
