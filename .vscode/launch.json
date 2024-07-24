@@ -8,7 +8,7 @@
             "name": "检测程序",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/tools/cli-cpp/bpftime",
+            "program": "${workspaceFolder}/build/tools/cli/bpftime",
             "args": [
                 "load",
                 "${workspaceFolder}/example/malloc/malloc"
@@ -58,7 +58,7 @@
             "name": "被检测程序",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/tools/cli-cpp/bpftime",
+            "program": "${workspaceFolder}/build/tools/cli/bpftime",
             "args": [
                 "start",
                 "${workspaceFolder}/example/malloc/victim"
