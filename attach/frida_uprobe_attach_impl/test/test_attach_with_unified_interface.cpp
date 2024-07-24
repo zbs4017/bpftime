@@ -2,7 +2,7 @@
 #include "catch2/catch_test_macros.hpp"
 #include "frida_attach_private_data.hpp"
 #include "frida_uprobe_attach_impl.hpp"
-#include "frida_uprobe_attach_internal.hpp"
+#include "frida_register_def.hpp"
 #include <cstdint>
 #include <frida_uprobe.hpp>
 #include <memory>
@@ -33,8 +33,8 @@ TEST_CASE("Test with unified interface")
 		id = man->create_attach_with_ebpf_callback(
 			[&](const void *v, size_t, uint64_t *) {
 				bpftime::pt_regs *mem = (bpftime::pt_regs *)v;
-				REQUIRE(mem->di == 1);
-				REQUIRE(mem->si == 2);
+				REQUIRE(PT_REGS_PARM1(mem) == 1);
+				REQUIRE(PT_REGS_PARM2(mem) == 2);
 				invoked = true;
 				return 0;
 			},
@@ -45,7 +45,7 @@ TEST_CASE("Test with unified interface")
 		id = man->create_attach_with_ebpf_callback(
 			[&](const void *v, size_t, uint64_t *) {
 				bpftime::pt_regs *mem = (bpftime::pt_regs *)v;
-				REQUIRE(mem->ax == 3);
+				REQUIRE(PT_REGS_RC(mem) == 3);
 				invoked = true;
 				return 0;
 			},

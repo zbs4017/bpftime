@@ -74,11 +74,13 @@ int from_cb_idx_to_attach_type(int idx)
 	default:
 		assert(false && "Unreachable!");
 	}
+	return 0;
 }
 } // namespace attach
 } // namespace bpftime
 
-extern "C" uint64_t bpftime_get_func_ret(uint64_t ctx, uint64_t *value)
+extern "C" uint64_t bpftime_get_func_ret(uint64_t ctx, uint64_t *value,
+					 uint64_t, uint64_t, uint64_t)
 {
 	GumInvocationContext *gum_ctx =
 		gum_interceptor_get_current_invocation();
@@ -91,7 +93,7 @@ extern "C" uint64_t bpftime_get_func_ret(uint64_t ctx, uint64_t *value)
 }
 
 extern "C" uint64_t bpftime_get_func_arg(uint64_t ctx, uint32_t n,
-					 uint64_t *value)
+					 uint64_t *value, uint64_t, uint64_t)
 {
 	GumInvocationContext *gum_ctx =
 		gum_interceptor_get_current_invocation();
@@ -104,7 +106,8 @@ extern "C" uint64_t bpftime_get_func_arg(uint64_t ctx, uint32_t n,
 	return 0;
 }
 
-extern "C" uint64_t bpftime_get_retval(void)
+extern "C" uint64_t bpftime_get_retval(uint64_t, uint64_t, uint64_t, uint64_t,
+				       uint64_t)
 {
 	GumInvocationContext *gum_ctx =
 		gum_interceptor_get_current_invocation();

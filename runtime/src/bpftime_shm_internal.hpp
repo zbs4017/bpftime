@@ -45,10 +45,7 @@ class bpftime_shm {
 
     public:
 	// Get the configuration object
-	const struct agent_config &get_agent_config()
-	{
-		return *agent_config;
-	}
+	const struct agent_config &get_agent_config();
 	// Set the configuration object
 	void set_agent_config(const struct agent_config &config);
 	// Check whether a certain pid was already equipped with syscall tracer
@@ -93,23 +90,22 @@ class bpftime_shm {
 			 const char *prog_name, int prog_type);
 
 	// add a bpf link fd
-	int add_bpf_link(int fd, struct bpf_link_create_args* args);
+	int add_bpf_link(int fd, struct bpf_link_create_args *args);
 
 	// create a bpf map fd
 	int add_bpf_map(int fd, const char *name, bpftime::bpf_map_attr attr);
 	uint32_t bpf_map_value_size(int fd) const;
 
 	const void *bpf_map_lookup_elem(int fd, const void *key,
-					bool from_userspace) const;
+					bool from_syscall) const;
 
 	long bpf_map_update_elem(int fd, const void *key, const void *value,
-				 uint64_t flags, bool from_userspace) const;
+				 uint64_t flags, bool from_syscall) const;
 
-	long bpf_delete_elem(int fd, const void *key,
-			     bool from_userspace) const;
+	long bpf_delete_elem(int fd, const void *key, bool from_syscall) const;
 
 	int bpf_map_get_next_key(int fd, const void *key, void *next_key,
-				 bool from_userspace) const;
+				 bool from_syscall) const;
 
 	// create an uprobe fd
 	int add_uprobe(int fd, int pid, const char *name, uint64_t offset,
@@ -118,6 +114,9 @@ class bpftime_shm {
 	int add_tracepoint(int fd, int pid, int32_t tracepoint_id);
 	// create a software perf event fd, typically for a perf event
 	int add_software_perf_event(int cpu, int32_t sample_type,
+				    int64_t config);
+	// Create a software perf event instance, with the specified fd
+	int add_software_perf_event(int fd, int cpu, int32_t sample_type,
 				    int64_t config);
 
 	// add replace function fd
@@ -162,6 +161,8 @@ class bpftime_shm {
 
 	std::optional<void *>
 	get_software_perf_event_raw_buffer(int fd, size_t buffer_sz) const;
+
+	int add_custom_perf_event(int type, const char *attach_argument);
 };
 
 // memory region for maps and prog info

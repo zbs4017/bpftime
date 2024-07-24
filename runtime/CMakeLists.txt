@@ -59,7 +59,6 @@ set(sources
   src/bpftime_shm.cpp
   src/bpftime_shm_internal.cpp
   src/bpftime_shm_json.cpp
-  src/syscall_table.cpp
   src/bpftime_prog.cpp
   src/ufunc.cpp
   src/bpf_helper.cpp
@@ -71,28 +70,31 @@ set(sources
   src/bpf_map/userspace/per_cpu_array_map.cpp
   src/bpf_map/userspace/per_cpu_hash_map.cpp
   src/bpf_map/userspace/prog_array.cpp
-
-  src/bpf_map/shared/array_map_kernel_user.cpp
-  src/bpf_map/shared/hash_map_kernel_user.cpp
-  src/bpf_map/shared/percpu_array_map_kernel_user.cpp
-  src/bpf_map/shared/perf_event_array_kernel_user.cpp
-
   extension/extension_helper.cpp
 )
 
-# list(APPEND sources
-# src/map/map_hash.cpp
-# src/map/map_common.c
-# src/map/context_map.c
-# )
+if(BPFTIME_BUILD_KERNEL_BPF)
+  list(APPEND sources
+    src/bpf_map/shared/array_map_kernel_user.cpp
+    src/bpf_map/shared/hash_map_kernel_user.cpp
+    src/bpf_map/shared/percpu_array_map_kernel_user.cpp
+    src/bpf_map/shared/perf_event_array_kernel_user.cpp
+  )
+endif()
 
-# add_subdirectory(src)
+
 set(headers
   include/
 )
-message(INFO "Headers: ${headers}")
+message(INFO " Headers: ${headers}")
 
-message(INFO "Found the following sources: ${sources}")
+message(INFO " Found the following sources: ${sources}")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG)
+else()
+  add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO)
+endif()
 
 add_library(
   ${PROJECT_NAME}
@@ -117,24 +119,21 @@ target_include_directories(${PROJECT_NAME}
   ${CMAKE_CURRENT_BINARY_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../third_party
   ${SPDLOG_INCLUDE}
-  ${FRIDA_UPROBE_ATTACH_IMPL_INCLUDE}
-  ${SYSCALL_TRACE_ATTACH_IMPL_INCLUDE}
 )
 
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
   vm-bpf
   spdlog::spdlog
-  bpftime_frida_uprobe_attach_impl
-  bpftime_syscall_trace_attach_impl
+  bpftime_base_attach_impl
 )
-add_dependencies(${PROJECT_NAME} vm-bpf FridaGum syscall_id_table spdlog::spdlog libbpf bpftime_frida_uprobe_attach_impl bpftime_syscall_trace_attach_impl)
+add_dependencies(${PROJECT_NAME} vm-bpf FridaGum spdlog::spdlog libbpf bpftime_base_attach_impl)
 
-if (BPFTIME_ENABLE_IOURING_EXT)
-target_link_libraries(${PROJECT_NAME}
-  PUBLIC
-  uring
-)
+if(BPFTIME_ENABLE_IOURING_EXT)
+  target_link_libraries(${PROJECT_NAME}
+    PUBLIC
+    uring
+  )
 endif()
 
 if(${ENABLE_EBPF_VERIFIER})
@@ -173,6 +172,7 @@ target_link_libraries(${PROJECT_NAME}
   -ldl
   -lz
   -lelf
+  bpftime_base_attach_impl
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

@@ -70,7 +70,7 @@ static void handle_sub_process()
 	managed_shared_memory segment(open_only, SHM_NAME);
 	auto manager = segment.find<handler_manager>(HANDLER_NAME).first;
 	auto &manager_ref = *manager;
-	manager_ref.clear_fd_at(2, segment);
+	manager_ref.clear_id_at(2, segment);
 	test_lookup_map(1, manager_ref, segment);
 	test_lookup_map(3, manager_ref, segment);
 	test_get_next_element(1, manager_ref, segment);
@@ -95,15 +95,15 @@ TEST_CASE("Test shm hash maps with sub process")
 	auto &manager_ref = *manager;
 
 	manager_ref.set_handler(1,
-				bpf_map_handler(BPF_MAP_TYPE_HASH, 4, 8, 1024,
+				bpf_map_handler(1, BPF_MAP_TYPE_HASH, 4, 8, 1024,
 						0, "hash1", segment),
 				segment);
 	manager_ref.set_handler(2,
-				bpf_map_handler(BPF_MAP_TYPE_HASH, 4, 8, 1024,
+				bpf_map_handler(2, BPF_MAP_TYPE_HASH, 4, 8, 1024,
 						0, "hash2", segment),
 				segment);
 	manager_ref.set_handler(3,
-				bpf_map_handler(BPF_MAP_TYPE_ARRAY, 4, 8, 1024,
+				bpf_map_handler(3, BPF_MAP_TYPE_ARRAY, 4, 8, 1024,
 						0, "array1", segment),
 				segment);
 

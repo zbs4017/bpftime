@@ -5,6 +5,7 @@
  */
 #include "bpftime_shm.hpp"
 #include "handler/epoll_handler.hpp"
+#include "handler/link_handler.hpp"
 #include "handler/perf_event_handler.hpp"
 #include "spdlog/spdlog.h"
 #include <bpftime_shm_internal.hpp>
@@ -24,6 +25,7 @@ extern "C" void bpftime_initialize_global_shm(bpftime::shm_open_type type)
 	// call the constructor
 	new (&shm_holder.global_shared_memory) bpftime_shm(type);
 	global_shm_initialized = true;
+	SPDLOG_INFO("Global shm initialized");
 }
 
 extern "C" void bpftime_destroy_global_shm()
@@ -41,9 +43,10 @@ extern "C" void bpftime_destroy_global_shm()
 extern "C" void bpftime_remove_global_shm()
 {
 	using namespace bpftime;
-	boost::interprocess::shared_memory_object::remove(
-		get_global_shm_name());
-	SPDLOG_INFO("Global shm removed");
+	if (boost::interprocess::shared_memory_object::remove(
+		    get_global_shm_name()) != false) {
+		SPDLOG_INFO("Global shm removed");
+	}
 }
 
 static __attribute__((destructor(65535))) void __destruct_shm()
@@ -86,7 +89,7 @@ uint32_t bpftime_shm::bpf_map_value_size(int fd) const
 }
 
 const void *bpftime_shm::bpf_map_lookup_elem(int fd, const void *key,
-					     bool from_userspace) const
+					     bool from_syscall) const
 {
 	if (!is_map_fd(fd)) {
 		errno = ENOENT;
@@ -94,12 +97,12 @@ const void *bpftime_shm::bpf_map_lookup_elem(int fd, const void *key,
 	}
 	auto &handler =
 		std::get<bpftime::bpf_map_handler>(manager->get_handler(fd));
-	return handler.map_lookup_elem(key, from_userspace);
+	return handler.map_lookup_elem(key, from_syscall);
 }
 
 long bpftime_shm::bpf_map_update_elem(int fd, const void *key,
 				      const void *value, uint64_t flags,
-				      bool from_userspace) const
+				      bool from_syscall) const
 {
 	if (!is_map_fd(fd)) {
 		errno = ENOENT;
@@ -107,11 +110,11 @@ long bpftime_shm::bpf_map_update_elem(int fd, const void *key,
 	}
 	auto &handler =
 		std::get<bpftime::bpf_map_handler>(manager->get_handler(fd));
-	return handler.map_update_elem(key, value, flags, from_userspace);
+	return handler.map_update_elem(key, value, flags, from_syscall);
 }
 
 long bpftime_shm::bpf_delete_elem(int fd, const void *key,
-				  bool from_userspace) const
+				  bool from_syscall) const
 {
 	if (!is_map_fd(fd)) {
 		errno = ENOENT;
@@ -119,11 +122,11 @@ long bpftime_shm::bpf_delete_elem(int fd, const void *key,
 	}
 	auto &handler =
 		std::get<bpftime::bpf_map_handler>(manager->get_handler(fd));
-	return handler.map_delete_elem(key, from_userspace);
+	return handler.map_delete_elem(key, from_syscall);
 }
 
 int bpftime_shm::bpf_map_get_next_key(int fd, const void *key, void *next_key,
-				      bool from_userspace) const
+				      bool from_syscall) const
 {
 	if (!is_map_fd(fd)) {
 		errno = ENOENT;
@@ -131,7 +134,7 @@ int bpftime_shm::bpf_map_get_next_key(int fd, const void *key, void *next_key,
 	}
 	auto &handler =
 		std::get<bpftime::bpf_map_handler>(manager->get_handler(fd));
-	return handler.bpf_map_get_next_key(key, next_key, from_userspace);
+	return handler.bpf_map_get_next_key(key, next_key, from_syscall);
 }
 
 int bpftime_shm::add_uprobe(int fd, int pid, const char *name, uint64_t offset,
@@ -191,7 +194,13 @@ int bpftime_shm::add_tracepoint(int fd, int pid, int32_t tracepoint_id)
 int bpftime_shm::add_software_perf_event(int cpu, int32_t sample_type,
 					 int64_t config)
 {
-	int fd = open_fake_fd();
+	return add_software_perf_event(open_fake_fd(), cpu, sample_type,
+				       config);
+}
+
+int bpftime_shm::add_software_perf_event(int fd, int cpu, int32_t sample_type,
+					 int64_t config)
+{
 	return manager->set_handler(fd,
 				    bpftime::bpf_perf_event_handler(
 					    cpu, sample_type, config, segment),
@@ -224,10 +233,14 @@ int bpftime_shm::add_bpf_prog_attach_target(int perf_fd, int bpf_fd,
 		errno = ENOENT;
 		return -1;
 	}
-	auto &handler = std::get<bpftime::bpf_prog_handler>(
-		manager->get_handler(bpf_fd));
-	handler.add_attach_fd(perf_fd, cookie);
-	return 0;
+	int next_id = open_fake_fd();
+	if (next_id < 0) {
+		SPDLOG_ERROR("Unable to find an available id: {}", next_id);
+		return -ENOSPC;
+	}
+	manager->set_handler(next_id, bpf_link_handler(bpf_fd, perf_fd, cookie),
+			     segment);
+	return next_id;
 }
 
 int bpftime_shm::perf_event_enable(int fd) const
@@ -271,7 +284,7 @@ int bpftime_shm::add_software_perf_event_to_epoll(int swpe_fd, int epoll_fd,
 	}
 	auto &perf_handler =
 		std::get<bpf_perf_event_handler>(manager->get_handler(swpe_fd));
-	if (perf_handler.type != bpf_event_type::PERF_TYPE_SOFTWARE) {
+	if (perf_handler.type != (int)bpf_event_type::PERF_TYPE_SOFTWARE) {
 		SPDLOG_ERROR(
 			"Expected perf fd {} to be a software perf event instance",
 			swpe_fd);
@@ -461,7 +474,7 @@ int bpftime_shm::add_bpf_prog(int fd, const ebpf_inst *insn, size_t insn_cnt,
 }
 
 // add a bpf link fd
-int bpftime_shm::add_bpf_link(int fd, struct bpf_link_create_args* args)
+int bpftime_shm::add_bpf_link(int fd, struct bpf_link_create_args *args)
 {
 	if (fd < 0) {
 		// if fd is negative, we need to create a new fd for allocating
@@ -471,16 +484,14 @@ int bpftime_shm::add_bpf_link(int fd, struct bpf_link_create_args* args)
 		errno = EBADF;
 		return -1;
 	}
-	return manager->set_handler(
-		fd,
-		bpftime::bpf_link_handler{ *args },
-		segment);
+	return manager->set_handler(fd, bpftime::bpf_link_handler(*args),
+				    segment);
 }
 
 void bpftime_shm::close_fd(int fd)
 {
 	if (manager) {
-		manager->clear_fd_at(fd, segment);
+		manager->clear_id_at(fd, segment);
 	}
 }
 
@@ -641,7 +652,7 @@ int bpftime_shm::add_bpf_map(int fd, const char *name,
 	verifier::set_map_descriptors(helpers);
 #endif
 	return manager->set_handler(
-		fd, bpftime::bpf_map_handler(name, segment, attr), segment);
+		fd, bpftime::bpf_map_handler(fd, name, segment, attr), segment);
 }
 
 const handler_manager *bpftime_shm::get_manager() const
@@ -664,16 +675,30 @@ bool bpftime_shm::is_software_perf_event_handler_fd(int fd) const
 	if (!is_perf_event_handler_fd(fd))
 		return false;
 	const auto &hd = std::get<bpf_perf_event_handler>(get_handler(fd));
-	return hd.type == bpf_event_type::PERF_TYPE_SOFTWARE;
+	return hd.type == (int)bpf_event_type::PERF_TYPE_SOFTWARE;
 }
+
+// local agent config can be used for test or local process
+static agent_config local_agent_config = {};
 
 void bpftime_shm::set_agent_config(const struct agent_config &config)
 {
 	if (agent_config == nullptr) {
-		SPDLOG_ERROR("agent_config is nullptr, set error");
+		SPDLOG_INFO(
+			"global agent_config is nullptr, set current process config");
+		local_agent_config = config;
 		return;
 	}
 	*agent_config = config;
+}
+
+const struct agent_config &bpftime_shm::get_agent_config()
+{
+	if (agent_config == nullptr) {
+		SPDLOG_INFO("use current process config");
+		return local_agent_config;
+	}
+	return *agent_config;
 }
 
 const bpftime::agent_config &bpftime_get_agent_config()
@@ -697,5 +722,17 @@ bpftime_shm::get_software_perf_event_raw_buffer(int fd, size_t buffer_sz) const
 	const auto &handler = std::get<bpf_perf_event_handler>(get_handler(fd));
 	return handler.try_get_software_perf_data_raw_buffer(buffer_sz);
 }
-
+int bpftime_shm::add_custom_perf_event(int type, const char *attach_argument)
+{
+	int fd = open_fake_fd();
+	if (fd < 0) {
+		SPDLOG_ERROR("Unable to allocate id for custom perf event: {}",
+			     errno);
+		return fd;
+	}
+	manager->set_handler(
+		fd, bpf_perf_event_handler(type, attach_argument, segment),
+		segment);
+	return fd;
+}
 } // namespace bpftime

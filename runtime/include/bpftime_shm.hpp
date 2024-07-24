@@ -102,6 +102,7 @@ enum class bpf_map_type {
 	BPF_MAP_TYPE_KERNEL_USER_PERF_EVENT_ARRAY =
 		KERNEL_USER_MAP_OFFSET + BPF_MAP_TYPE_PERF_EVENT_ARRAY,
 
+	BPF_MAP_TYPE_MAX = 2048,
 };
 
 enum class shm_open_type {
@@ -151,6 +152,35 @@ extern const shm_open_type global_shm_open_type;
 const bpftime::agent_config &set_agent_config_from_env();
 const bpftime::agent_config &bpftime_get_agent_config();
 void bpftime_set_agent_config(bpftime::agent_config &cfg);
+
+// Map ops for register external map types and operations
+//
+// The map ops will be store in each process, it's not in global shared memory
+// Once the map operates on non-builtin map type, it will find the map ops
+// in the map ops table and call the corresponding functions.
+struct bpftime_map_ops {
+	// initialize the map
+	int (*alloc_map)(int id, const char *name, bpf_map_attr attr);
+	// free the map
+	void (*map_free)(int id);
+	// lookup the elem
+	void *(*elem_lookup)(int id, const void *key, bool from_syscall);
+	// update the elem
+	long (*elem_update)(int id, const void *key, const void *value,
+			    uint64_t flags, bool from_syscall);
+	// delete the elem
+	long (*elem_delete)(int id, const void *key, bool from_syscall);
+	// get the next key
+	int (*map_get_next_key)(int id, const void *key, void *next_key,
+				bool from_syscall);
+};
+
+// register new map ops
+//
+// External map ops needs the syscall-server is running with the map ops
+// enabled.
+int bpftime_register_map_ops(int map_type, bpftime_map_ops *ops);
+
 } // namespace bpftime
 
 extern "C" {
@@ -230,7 +260,7 @@ struct bpf_link_create_args {
 //
 // @param[fd]: fd is the fd allocated by the kernel. if fd is -1, then the
 // function will allocate a new perf event fd.
-int bpftime_link_create(int fd, struct bpf_link_create_args* args);
+int bpftime_link_create(int fd, struct bpf_link_create_args *args);
 
 // create a bpf prog in the global shared memory
 //
@@ -251,16 +281,6 @@ int bpftime_map_get_info(int fd, bpftime::bpf_map_attr *out_attr,
 
 // get the map value size from the global shared memory by fd
 uint32_t bpftime_map_value_size_from_syscall(int fd);
-
-// used by bpf_helper to get the next key
-int bpftime_helper_map_get_next_key(int fd, const void *key, void *next_key);
-// used by bpf_helper to lookup the elem
-const void *bpftime_helper_map_lookup_elem(int fd, const void *key);
-// used by bpf_helper to update the elem
-long bpftime_helper_map_update_elem(int fd, const void *key, const void *value,
-				    uint64_t flags);
-// used by bpf_helper to delete the elem
-long bpftime_helper_map_delete_elem(int fd, const void *key);
 
 // use from bpf syscall to get the next key
 int bpftime_map_get_next_key(int fd, const void *key, void *next_key);
@@ -331,6 +351,11 @@ int bpftime_add_ureplace_or_override(int fd, int pid, const char *name,
 				     uint64_t offset, bool is_replace);
 
 int bpftime_get_current_thread_cookie(uint64_t *out);
+
+int bpftime_add_custom_perf_event(int type, const char *attach_argument);
+
+int bpftime_poll_from_ringbuf(int rb_fd, void *ctx,
+			      int (*cb)(void *, void *, size_t));
 }
 
 #endif // BPFTIME_SHM_CPP_H

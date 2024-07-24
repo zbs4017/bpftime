@@ -26,6 +26,7 @@
 #include "bpftime_internal.h"
 #include <spdlog/spdlog.h>
 #include <vector>
+#include <bpftime_shm_internal.hpp>
 
 #define PATH_MAX 4096
 
@@ -33,13 +34,8 @@ using namespace std;
 
 extern "C" {
 
-uint64_t bpftime_get_func_arg(uint64_t ctx, uint32_t n, uint64_t *value);
 
-uint64_t bpftime_get_func_ret(uint64_t ctx, uint64_t *value);
 
-// long bpftime_get_func_arg_cnt(void *ctx);
-
-uint64_t bpftime_get_retval(void);
 
 uint64_t bpftime_override_return(uint64_t ctx, uint64_t value);
 uint64_t bpftime_set_retval(uint64_t retval);
@@ -142,21 +138,24 @@ uint64_t bpftime_get_current_comm(uint64_t buf, uint64_t size, uint64_t,
 uint64_t bpftime_map_lookup_elem_helper(uint64_t map, uint64_t key, uint64_t,
 					uint64_t, uint64_t)
 {
-	return (uint64_t)bpftime_helper_map_lookup_elem(map >> 32, (void *)key);
+	return (uint64_t)bpftime::shm_holder.global_shared_memory
+		.bpf_map_lookup_elem(map >> 32, (void *)key, false);
 }
 
 uint64_t bpftime_map_update_elem_helper(uint64_t map, uint64_t key,
 					uint64_t value, uint64_t flags,
 					uint64_t)
 {
-	return (uint64_t)bpftime_helper_map_update_elem(map >> 32, (void *)key,
-							(void *)value, flags);
+	return (uint64_t)
+		bpftime::shm_holder.global_shared_memory.bpf_map_update_elem(
+			map >> 32, (void *)key, (void *)value, flags, false);
 }
 
 uint64_t bpftime_map_delete_elem_helper(uint64_t map, uint64_t key, uint64_t,
 					uint64_t, uint64_t)
 {
-	return (uint64_t)bpftime_helper_map_delete_elem(map >> 32, (void *)key);
+	return (uint64_t)bpftime::shm_holder.global_shared_memory
+		.bpf_delete_elem(map >> 32, (void *)key, false);
 }
 
 uint64_t bpf_probe_read_str(uint64_t buf, uint64_t bufsz, uint64_t ptr,
@@ -263,8 +262,9 @@ uint64_t bpf_perf_event_output(uint64_t ctx, uint64_t map, uint64_t flags,
 	int ret;
 	if (map_ty == bpftime::bpf_map_type::BPF_MAP_TYPE_PERF_EVENT_ARRAY) {
 		const int32_t *val_ptr =
-			(int32_t *)(uintptr_t)bpftime_helper_map_lookup_elem(
-				fd, &current_cpu);
+			(int32_t *)(uintptr_t)bpftime::shm_holder
+				.global_shared_memory.bpf_map_lookup_elem(
+					fd, &current_cpu, false);
 		if (val_ptr == nullptr) {
 			SPDLOG_ERROR("Invalid map fd for perf event output: {}",
 				     fd);
@@ -705,24 +705,6 @@ const bpftime_helper_group kernel_helper_group = {
 		    .index = BPF_FUNC_probe_write_user,
 		    .name = "bpf_probe_write_user",
 		    .fn = (void *)bpftime_probe_write_user,
-	    } },
-	  { BPF_FUNC_get_func_arg,
-	    bpftime_helper_info{
-		    .index = BPF_FUNC_get_func_arg,
-		    .name = "bpf_get_func_arg",
-		    .fn = (void *)bpftime_get_func_arg,
-	    } },
-	  { BPF_FUNC_get_func_ret,
-	    bpftime_helper_info{
-		    .index = BPF_FUNC_get_func_ret,
-		    .name = "bpf_get_func_ret_id",
-		    .fn = (void *)bpftime_get_func_ret,
-	    } },
-	  { BPF_FUNC_get_retval,
-	    bpftime_helper_info{
-		    .index = BPF_FUNC_get_retval,
-		    .name = "bpf_get_retval",
-		    .fn = (void *)bpftime_get_retval,
 	    } },
 	  { BPF_FUNC_set_retval,
 	    bpftime_helper_info{

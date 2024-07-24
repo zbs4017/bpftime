@@ -9,6 +9,7 @@
 #include "handler/perf_event_handler.hpp"
 #include "spdlog/spdlog.h"
 #include <csignal>
+#include <cstddef>
 #include <signal.h>
 #include <cerrno>
 #include <errno.h>
@@ -25,7 +26,7 @@ int bpftime_find_minimal_unused_fd()
 	return shm_holder.global_shared_memory.find_minimal_unused_fd();
 }
 
-int bpftime_link_create(int fd, struct bpf_link_create_args* args)
+int bpftime_link_create(int fd, struct bpf_link_create_args *args)
 {
 	return shm_holder.global_shared_memory.add_bpf_link(fd, args);
 }
@@ -41,28 +42,12 @@ int bpftime_maps_create(int fd, const char *name, bpftime::bpf_map_attr attr)
 {
 	return shm_holder.global_shared_memory.add_bpf_map(fd, name, attr);
 }
+
 uint32_t bpftime_map_value_size_from_syscall(int fd)
 {
 	return shm_holder.global_shared_memory.bpf_map_value_size(fd);
 }
 
-const void *bpftime_helper_map_lookup_elem(int fd, const void *key)
-{
-	return shm_holder.global_shared_memory.bpf_map_lookup_elem(fd, key,
-								   false);
-}
-
-long bpftime_helper_map_update_elem(int fd, const void *key, const void *value,
-				    uint64_t flags)
-{
-	return shm_holder.global_shared_memory.bpf_map_update_elem(
-		fd, key, value, flags, false);
-}
-
-long bpftime_helper_map_delete_elem(int fd, const void *key)
-{
-	return shm_holder.global_shared_memory.bpf_delete_elem(fd, key, false);
-}
 int bpftime_helper_map_get_next_key(int fd, const void *key, void *next_key)
 {
 	return shm_holder.global_shared_memory.bpf_map_get_next_key(
@@ -445,9 +430,11 @@ int bpftime_perf_event_output(int fd, const void *buf, size_t sz)
 		return -1;
 	}
 	auto &handler = std::get<bpf_perf_event_handler>(shm.get_handler(fd));
-	if (handler.sw_perf.has_value()) {
+	if (std::holds_alternative<software_perf_event_shared_ptr>(
+		    handler.data)) {
 		SPDLOG_DEBUG("Perf out value to fd {}, sz {}", fd, sz);
-		return handler.sw_perf.value()->output_data(buf, sz);
+		return std::get<software_perf_event_shared_ptr>(handler.data)
+			->output_data(buf, sz);
 	} else {
 		SPDLOG_ERROR(
 			"Expected perf event handler {} to be a software perf event handler",
@@ -585,6 +572,29 @@ const bpftime::agent_config &bpftime::set_agent_config_from_env()
 	}
 	const char *use_jit = getenv("BPFTIME_USE_JIT");
 	agent_config.jit_enabled = use_jit != nullptr;
+	agent_config.allow_non_buildin_map_types =
+		getenv("BPFTIME_ALLOW_EXTERNAL_MAPS") != nullptr;
 	bpftime_set_agent_config(agent_config);
 	return bpftime_get_agent_config();
+}
+
+int bpftime_add_custom_perf_event(int type, const char *attach_argument)
+{
+	return shm_holder.global_shared_memory.add_custom_perf_event(
+		type, attach_argument);
+}
+
+int bpftime_poll_from_ringbuf(int rb_fd, void *ctx,
+			      int (*cb)(void *, void *, size_t))
+{
+	auto &shm = shm_holder.global_shared_memory;
+	if (auto ret = shm.try_get_ringbuf_map_impl(rb_fd); ret.has_value()) {
+		auto impl = ret.value();
+		return impl->create_impl_shared_ptr()->fetch_data(
+			[=](void *buf, int sz) { return cb(ctx, buf, sz); });
+	} else {
+		errno = EINVAL;
+		SPDLOG_ERROR("Expected fd {} to be ringbuf map fd ", rb_fd);
+		return -EINVAL;
+	}
 }
